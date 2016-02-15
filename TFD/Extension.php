@@ -1,10 +1,12 @@
 <?php
-
-/* register the drupal specific tags and filters within a
-* proper declared twig extension
+/*
+* This file is part of Twig For Drupal 7.
 *
-* Part of the Drupal twig extension distribution
-* http://renebakx.nl/twig-for-drupal
+* @see http://tfd7.rocks for more information
+*
+* @author René Bakx
+* @description register the drupal specific tags and filters within a proper
+* declared twig extension
 */
 
 class TFD_Extension extends Twig_Extension {
@@ -66,11 +68,14 @@ class TFD_Extension extends Twig_Extension {
     $filters['plural'] = new Twig_SimpleFilter('plural', 'format_plural');
     $filters['url'] = new Twig_SimpleFilter('url', 'tfd_url');
     $filters['t'] = new Twig_SimpleFilter('t', 't');
+    $filters['attributes'] = new Twig_SimpleFilter('attributes', 'drupal_attributes');
+    $filters['check_plain'] = new Twig_SimpleFilter('check_plain', 'check_plain');
     $filters['ucfirst'] = new Twig_SimpleFilter('ucfirst', 'ucfirst');
     $filters['wrap'] = new Twig_SimpleFilter('wrap', 'tfd_wrap_text');
     $filters['machine_name'] = new Twig_SimpleFilter('machine_name', 'tfd_machine_name');
     $filters['truncate'] = new Twig_SimpleFilter('truncate', 'tfd_truncate_text');
     $filters['striphashes'] = new Twig_SimpleFilter('striphashes', 'tfd_striphashes');
+    $filters['without'] = new Twig_SimpleFilter('without', 'tfd_without');
     $filters = array_merge($filters, module_invoke_all('twig_filter', $filters, $this));
     return array_values($filters);
 
@@ -102,6 +107,7 @@ class TFD_Extension extends Twig_Extension {
     $functions['image_url'] = new Twig_SimpleFunction('image_url', 'tfd_image_url');
     $functions['image_size'] = new Twig_SimpleFunction('image_size', 'tfd_image_size');
     $functions['get_form_errors'] = new Twig_SimpleFunction('get_form_errors', 'tfd_form_get_errors');
+    $functions['children'] = new Twig_SimpleFunction('children', 'tfd_get_children');
 
     $functions = array_merge($functions, module_invoke_all('twig_function', $functions, $this));
     return array_values($functions);
@@ -164,10 +170,36 @@ function tfd_render($var) {
  * @param $var array item from the render array of doom item you wish to hide.
  * @return mixed
  */
-function tfd_hide(&$var) {
+function tfd_hide($var) {
   if (!is_null($var) && !is_scalar($var) && count($var) > 0) {
     hide($var);
   }
+}
+
+/**
+ * Additional Twig filter provided in Drupal 8 to render array ommitting
+ * certain elements in the array
+ *
+ * example {{ content|without(['links','language']) }}
+ *
+ * @param $input array
+ * @param $keys_to_remove array
+ * @return array
+ */
+
+function tfd_without($input, $keys_to_remove) {
+  if ($input instanceof ArrayAccess) {
+    $filtered = clone $input;
+  }
+  else {
+    $filtered = $input;
+  }
+  foreach ($keys_to_remove as $key) {
+    if (isset($filtered[$key])) {
+      unset($filtered[$key]);
+    }
+  }
+  return $filtered;
 }
 
 /**
@@ -178,7 +210,7 @@ function tfd_hide(&$var) {
  */
 function tfd_striphashes($array) {
 
-  if (is_array($array)){
+  if (is_array($array)) {
     $output = array();
     foreach ($array as $key => $value) {
       if ($key[0] !== '#') {
@@ -319,11 +351,12 @@ function tfd_url($item, $options = array()) {
     $ret = url('node/' . $item, (array) $options);
   }
   else {
-    $ret = url($item, (array) $options);
+    $parsed = drupal_parse_url($item);
+    $options += $parsed;
+    $ret = url($parsed['path'], (array) $options);
   }
   return check_url($ret);
 }
-
 
 function tfd_test_property($element, $propertyName, $value = TRUE) {
   return array_key_exists("#{$propertyName}", $element) && $element["#{$propertyName}"] == $value;
@@ -448,4 +481,21 @@ function tfd_view_block($delta, $module = NULL, $render = TRUE) {
     $output = ($render) ? render($build) : $build;
   }
   return $output;
+}
+
+/**
+ * Return the children of an element
+ *
+ * @param $render_array
+ * @return array
+ */
+function tfd_get_children($render_array) {
+  if (!empty($render_array) && is_array($render_array)) {
+    $children = array();
+    foreach (element_children($render_array) as $key) {
+      $children[] = $render_array[$key];
+    }
+    return $children;
+  }
+  return array();
 }
